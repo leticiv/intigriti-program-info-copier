@@ -16,22 +16,22 @@
 (function () {
   'use strict';
 
-  // ─── Tokens (Aura theme) ──────────────────────────────────────────────────
+  // ─── Tokens (Rose/pink theme) ──────────────────────────────────────────────
   const T = {
-    bg:        '#15141B',
-    surface:   '#1C1A24',
-    elevated:  '#23212E',
-    border:    '#2D2A3E',
-    borderHi:  '#3D3952',
-    text:      '#EDECEE',
-    muted:     '#6D6D6D',
-    accent:    '#A277FF',
-    accentLo:  'rgba(162,119,255,.15)',
-    green:     '#61FFCA',
-    greenLo:   'rgba(97,255,202,.12)',
-    red:       '#FF6767',
-    redLo:     'rgba(255,103,103,.12)',
-    yellow:    '#FFCA85',
+    bg:        '#0a0a0a',
+    surface:   '#111111',
+    elevated:  '#181818',
+    border:    '#1e1e1e',
+    borderHi:  '#2e2e2e',
+    text:      '#e8e8e8',
+    muted:     '#555555',
+    accent:    '#EB6F92',
+    accentLo:  'rgba(235,111,146,.12)',
+    green:     '#3DDC84',
+    greenLo:   'rgba(61,220,132,.12)',
+    red:       '#FF5F57',
+    redLo:     'rgba(255,95,87,.12)',
+    yellow:    '#FFB800',
     radius:    12,
     radiusSm:  6,
   };
@@ -247,7 +247,7 @@
       white-space: pre;
       line-height: 1.7;
       color: ${T.text};
-      font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+      font-family: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
       font-size: .78rem;
       outline: none;
     }
@@ -350,7 +350,7 @@
   }
 
   function loadFormat() {
-    try { const v = GM_getValue(STORAGE_KEY_FMT, 'plain'); return ['plain','json','csv'].includes(v) ? v : 'plain'; }
+    try { const v = GM_getValue(STORAGE_KEY_FMT, 'plain'); return ['plain','json','csv','markdown'].includes(v) ? v : 'plain'; }
     catch (_) { return 'plain'; }
   }
 
@@ -422,33 +422,58 @@
       });
     }
 
-    // parse each row: label + values per column
+    // parse each row
     const rowEls = table.querySelectorAll('lib-bounty-table-row');
     const parsedRows = [];
     rowEls.forEach(el => {
-      // extract label from lib-bounty-tier-label (avoids .currency text pollution)
       const tierLabel = el.querySelector('lib-bounty-tier-label .copy, lib-bounty-tier-label');
       const label = tierLabel ? tierLabel.textContent.trim() : '';
       if (!label) return;
 
-      // extract currency symbol from .currency element inside .row-label
       const currencyEl = el.querySelector('.row-label .currency');
-      const currency = currencyEl ? currencyEl.textContent.trim() : 'EUR';
+      const rawCurrency = currencyEl ? currencyEl.textContent.trim() : '';
+      const sym = rawCurrency.match(/[€$£¥]/);
+      const currency = sym ? sym[0] : '€';
 
-      // each .column inside the row corresponds to a header severity
+      // Try column-mapped extraction first
       const columns = el.querySelectorAll('.bounty-table-row-container.desktop-view > .column');
-      const values = [];
-      columns.forEach((col, i) => {
-        const rc = col.querySelector('.range-container');
-        if (!rc) return;
-        const parts = rc.children;
-        const min = parts[0] ? parts[0].textContent.trim() : '';
-        const max = parts[1] ? parts[1].textContent.trim() : '';
-        values.push({
-          severity: headers[i] ? headers[i].severity : `col-${i}`,
-          min, max,
+      let values = [];
+      if (columns.length) {
+        columns.forEach((col, i) => {
+          const rc = col.querySelector('.range-container');
+          if (!rc) return;
+          const parts = rc.children;
+          const min = parts[0] ? parts[0].textContent.trim() : '';
+          const max = parts[1] ? parts[1].textContent.trim() : '';
+          values.push({
+            severity: headers[i] ? headers[i].severity : `col-${i}`,
+            min, max,
+          });
         });
-      });
+      }
+
+      // Fallback 1: direct .range-container children
+      if (!values.length) {
+        const ranges = el.querySelectorAll('.range-container');
+        ranges.forEach(rc => {
+          const parts = rc.children;
+          const min = parts[0] ? parts[0].textContent.trim() : '';
+          const max = parts[1] ? parts[1].textContent.trim() : '';
+          values.push({ severity: '', min, max });
+        });
+      }
+
+      // Fallback 2: raw text of .range-container (regex number extraction)
+      if (!values.length) {
+        const ranges = el.querySelectorAll('.range-container');
+        ranges.forEach(rc => {
+          const raw = rc.textContent.trim();
+          const nums = raw.match(/[\d,.]+/g);
+          if (nums) {
+            values.push({ severity: '', min: nums[0] || '', max: nums[1] || '' });
+          }
+        });
+      }
 
       parsedRows.push({ label, currency, values });
     });
@@ -457,7 +482,7 @@
     if (!parsedRows.length && headers.length) {
       return headers.map(h => ({
         label: h.severity,
-        currency: 'EUR',
+        currency: '€',
         values: [{ severity: h.severity, min: '', max: '' }],
       }));
     }
@@ -606,9 +631,10 @@
 
   function formatSelected(data, selectedIds, format) {
     switch (format) {
-      case 'json': return formatJson(data, selectedIds);
-      case 'csv':  return formatCsv(data, selectedIds);
-      default:     return formatPlain(data, selectedIds);
+      case 'json':     return formatJson(data, selectedIds);
+      case 'csv':      return formatCsv(data, selectedIds);
+      case 'markdown': return formatMarkdown(data, selectedIds);
+      default:         return formatPlain(data, selectedIds);
     }
   }
 
@@ -618,28 +644,30 @@
 
     if (has('program')) {
       const p = data.program;
-      lines.push('═══════════════════════════════════════════════════════════════');
-      lines.push(`  PROGRAM  ${p.company}${p.name && p.company !== p.name ? ` / ${p.name}` : ''}`);
-      if (p.status)         lines.push(`  STATUS   ${p.status}`);
-      if (p.confidentiality) lines.push(`  TYPE     ${p.confidentiality}`);
-      if (p.industry)       lines.push(`  SECTOR   ${p.industry}`);
-      lines.push(`  URL      ${p.url}`);
-      lines.push('═══════════════════════════════════════════════════════════════');
+      lines.push('───────────────────────────────────────────────────────────────');
+      lines.push(`  Program:  ${p.company}${p.name && p.company !== p.name ? ` / ${p.name}` : ''}`);
+      if (p.status)         lines.push(`  Status:   ${p.status}`);
+      if (p.confidentiality) lines.push(`  Type:     ${p.confidentiality}`);
+      if (p.industry)       lines.push(`  Sector:   ${p.industry}`);
+      lines.push(`  URL:      ${p.url}`);
+      lines.push('───────────────────────────────────────────────────────────────');
     }
 
     if (has('bounty') && data.bounty.length) {
       lines.push(`  BOUNTY RANGES`);
-      // collect all severity names across all rows
-      const allSevs = [...new Set(data.bounty.flatMap(r => r.values.map(v => v.severity)))];
-      const sevMaxLen = Math.max(...allSevs.map(s => s.length), 8);
-      const cur = data.bounty[0].currency;
+      const allSevs = [...new Set(data.bounty.flatMap(r => r.values.map(v => v.severity)))].filter(Boolean);
+      const sevMaxLen = allSevs.length ? Math.max(...allSevs.map(s => s.length), 8) : 0;
 
       data.bounty.forEach(row => {
         lines.push(`    ${row.label}`);
         row.values.forEach(v => {
-          const sev = v.severity.padEnd(sevMaxLen);
-          const range = v.min || v.max ? `${cur} ${v.min} - ${v.max}` : '';
-          if (range) lines.push(`      ${sev}  ${range}`);
+          if (!v.min && !v.max) return;
+          if (v.severity && sevMaxLen) {
+            const sev = v.severity.padEnd(sevMaxLen);
+            lines.push(`      ${sev}  ${row.currency} ${v.min} - ${v.max}`);
+          } else {
+            lines.push(`      ${row.currency} ${v.min} - ${v.max}`);
+          }
         });
       });
       lines.push('');
@@ -703,6 +731,94 @@
     return lines.join('\n').trim();
   }
 
+  function formatMarkdown(data, sel) {
+    const lines = [];
+    const has = id => sel.includes(id);
+
+    if (has('program')) {
+      const p = data.program;
+      lines.push(`## ${p.company}${p.name && p.company !== p.name ? ` / ${p.name}` : ''}`);
+      if (p.status)         lines.push(`- **Status:** ${p.status}`);
+      if (p.confidentiality) lines.push(`- **Type:** ${p.confidentiality}`);
+      if (p.industry)       lines.push(`- **Sector:** ${p.industry}`);
+      lines.push(`- **URL:** [${p.url}](${p.url})`);
+      lines.push('');
+    }
+
+    if (has('bounty') && data.bounty.length) {
+      lines.push('### Bounty Ranges');
+      data.bounty.forEach(row => {
+        lines.push(`**${row.label}**`);
+        row.values.forEach(v => {
+          if (!v.min && !v.max) return;
+          if (v.severity) {
+            lines.push(`- ${v.severity}: ${row.currency} ${v.min} - ${v.max}`);
+          } else {
+            lines.push(`- ${row.currency} ${v.min} - ${v.max}`);
+          }
+        });
+      });
+      lines.push('');
+    }
+
+    if (has('stats')) {
+      const s = data.stats;
+      lines.push('### Stats');
+      if (s.submissions)  lines.push(`- **Submissions:** ${s.submissions}`);
+      if (s.accepted)     lines.push(`- **Accepted:** ${s.accepted}`);
+      if (s.avgPayout)    lines.push(`- **Avg Payout:** ${s.avgPayout}`);
+      if (s.totalPayouts) lines.push(`- **Total Payouts:** ${s.totalPayouts}`);
+      if (s.firstResponse || s.triage || s.decide) {
+        lines.push('- **Response Times:**');
+        if (s.firstResponse) lines.push(`  - First response: ${s.firstResponse}`);
+        if (s.triage)        lines.push(`  - Triage: ${s.triage}`);
+        if (s.decide)        lines.push(`  - Decide: ${s.decide}`);
+      }
+      lines.push('');
+    }
+
+    if (has('response')) {
+      lines.push('### Response Times');
+      const r = data.stats;
+      if (r.firstResponse) lines.push(`- **First Response:** ${r.firstResponse}`);
+      if (r.triage)        lines.push(`- **Triage:** ${r.triage}`);
+      if (r.decide)        lines.push(`- **Decide:** ${r.decide}`);
+      lines.push('');
+    }
+
+    if (has('assetsIn') && data.assets.inScope.length) {
+      lines.push('### Assets (In-Scope)');
+      data.assets.inScope.forEach(a => {
+        const type = a.type ? ` [${a.type}]` : '';
+        lines.push(`- \`${a.name}\`${type}`);
+      });
+      lines.push('');
+    }
+
+    if (has('assetsOos') && data.assets.outOfScope.length) {
+      lines.push('### Assets (Out-of-Scope)');
+      data.assets.outOfScope.forEach(a => {
+        const type = a.type ? ` [${a.type}]` : '';
+        lines.push(`- \`${a.name}\`${type}`);
+      });
+      lines.push('');
+    }
+
+    if (has('oosVulns') && data.oosVulns.length) {
+      lines.push('### Out-of-Scope Vulnerabilities');
+      data.oosVulns.forEach(v => lines.push(`- ${v}`));
+      lines.push('');
+    }
+
+    if (has('safeHarbour') && data.safeHarbour) {
+      lines.push('### Safe Harbour');
+      lines.push(data.safeHarbour);
+      lines.push('');
+    }
+
+    return lines.join('\n').trim();
+  }
+
   function formatJson(data, sel) {
     const obj = {};
     if (sel.includes('program'))     obj.program = data.program;
@@ -751,18 +867,14 @@
   // ─── Render helper (plain colorized preview) ──────────────────────────────
   function renderPreview(text) {
     return text
-      .replace(/PROGRAM/g,     '<span class="ipic-preview-label">PROGRAM</span>')
-      .replace(/STATUS/g,      '<span class="ipic-preview-label">STATUS</span>')
-      .replace(/TYPE/g,        '<span class="ipic-preview-label">TYPE</span>')
-      .replace(/SECTOR/g,      '<span class="ipic-preview-label">SECTOR</span>')
-      .replace(/URL/g,         '<span class="ipic-preview-label">URL</span>')
-      .replace(/BOUNTY/g,      '<span class="ipic-preview-label">BOUNTY</span>')
-      .replace(/STATS/g,       '<span class="ipic-preview-label">STATS</span>')
-      .replace(/RESPONSE/g,    '<span class="ipic-preview-label">RESPONSE</span>')
-      .replace(/IN-SCOPE/g,    '<span class="ipic-preview-green">IN-SCOPE</span>')
-      .replace(/OUT-OF-SCOPE/g,'<span class="ipic-preview-red">OUT-OF-SCOPE</span>')
-      .replace(/SAFE HARBOUR/g,'<span class="ipic-preview-label">SAFE HARBOUR</span>')
-      .replace(/═+/g,          m => `<span class="ipic-preview-sep">${m}</span>`);
+      .replace(/(Program|Status|Type|Sector|URL):/g, '<span class="ipic-preview-label">$1:</span>')
+      .replace(/BOUNTY RANGES/g,  '<span class="ipic-preview-label">BOUNTY RANGES</span>')
+      .replace(/STATS/g,          '<span class="ipic-preview-label">STATS</span>')
+      .replace(/RESPONSE/g,       '<span class="ipic-preview-label">RESPONSE</span>')
+      .replace(/IN-SCOPE/g,       '<span class="ipic-preview-green">IN-SCOPE</span>')
+      .replace(/OUT-OF-SCOPE/g,   '<span class="ipic-preview-red">OUT-OF-SCOPE</span>')
+      .replace(/SAFE HARBOUR/g,   '<span class="ipic-preview-label">SAFE HARBOUR</span>')
+      .replace(/─+/g,             m => `<span class="ipic-preview-sep">${m}</span>`);
   }
 
   // ─── Modal ────────────────────────────────────────────────────────────────
@@ -788,6 +900,7 @@
           <div id="ipic-modal-footer">
             <select id="ipic-format-select">
               <option value="plain">plain</option>
+              <option value="markdown">markdown</option>
               <option value="json">json</option>
               <option value="csv">csv</option>
             </select>
@@ -830,6 +943,20 @@
 
     function renderChips() {
       chips.innerHTML = '';
+      // select / deselect all
+      const allBtn = document.createElement('div');
+      allBtn.className = 'ipic-chip' + (selectedSections.length === ALL_SECTIONS.length ? ' on' : '');
+      allBtn.style.borderStyle = 'dashed';
+      allBtn.innerHTML = `<span class="ipic-chip-check">${selectedSections.length === ALL_SECTIONS.length ? '✓' : ''}</span> all`;
+      allBtn.addEventListener('click', () => {
+        selectedSections = selectedSections.length === ALL_SECTIONS.length ? [] : [...ALL_SECTIONS.map(s => s.id)];
+        if (!selectedSections.length) selectedSections = [ALL_SECTIONS[0].id];
+        saveSelection(selectedSections);
+        renderChips();
+        updatePreview();
+      });
+      chips.appendChild(allBtn);
+
       ALL_SECTIONS.forEach(s => {
         const count = chipCount(s.id);
         const chip = document.createElement('div');
