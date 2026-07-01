@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Intigriti — Program Info Copier
 // @namespace    https://github.com/leticiv/intigriti-program-info-copier
-// @version      3.0.0
+// @version      3.1.0
 // @description  Extrai todas as informações de um programa Intigriti com seleção de seções e copia formatado
 // @author       leticiv
 // @match        https://app.intigriti.com/programs/*
@@ -16,7 +16,6 @@
 (function () {
   'use strict';
 
-  // ─── Tokens (Rose/pink theme) ──────────────────────────────────────────────
   const T = {
     bg:        '#0a0a0a',
     surface:   '#111111',
@@ -36,7 +35,6 @@
     radiusSm:  6,
   };
 
-  // ─── Style ─────────────────────────────────────────────────────────────────
   GM_addStyle(`
     #ipic-inner {
       all: initial;
@@ -44,8 +42,6 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
-
-    /* ── botão minimalista ────────────────────────────────────────────── */
     #ipic-btn {
       position: fixed;
       bottom: 24px;
@@ -74,9 +70,7 @@
       padding: 0 14px 0 10px;
       gap: 6px;
     }
-    #ipic-btn:hover .ipic-btn-label {
-      display: inline;
-    }
+    #ipic-btn:hover .ipic-btn-label { display: inline; }
     #ipic-btn .ipic-btn-label {
       display: none;
       font-size: .75rem;
@@ -84,9 +78,7 @@
       letter-spacing: .04em;
       white-space: nowrap;
     }
-    #ipic-btn svg {
-      flex-shrink: 0;
-    }
+    #ipic-btn svg { flex-shrink: 0; }
     #ipic-btn .ipic-dot {
       width: 6px;
       height: 6px;
@@ -100,8 +92,6 @@
       0%,100% { opacity: .6; transform: scale(1); }
       50%      { opacity: 1; transform: scale(1.2); }
     }
-
-    /* ── toast ─────────────────────────────────────────────────────────── */
     #ipic-toast {
       position: fixed;
       bottom: 28px;
@@ -120,14 +110,9 @@
       white-space: pre-line;
       transition: opacity .2s ease, transform .25s cubic-bezier(.34,1.56,.64,1);
     }
-    #ipic-toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
+    #ipic-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     #ipic-toast.ok  { border-color: ${T.green}; color: ${T.green}; }
     #ipic-toast.err { border-color: ${T.red};   color: ${T.red}; }
-
-    /* ── overlay ───────────────────────────────────────────────────────── */
     #ipic-overlay {
       position: fixed;
       inset: 0;
@@ -138,8 +123,6 @@
       align-items: center;
       justify-content: center;
     }
-
-    /* ── modal ─────────────────────────────────────────────────────────── */
     #ipic-modal {
       background: ${T.bg};
       border: 1px solid ${T.border};
@@ -155,8 +138,6 @@
       from { opacity: 0; transform: translateY(12px); }
       to   { opacity: 1; transform: translateY(0); }
     }
-
-    /* ── header ────────────────────────────────────────────────────────── */
     #ipic-modal-header {
       display: flex;
       align-items: center;
@@ -183,8 +164,6 @@
       line-height: 1;
     }
     #ipic-modal-close:hover { color: ${T.text}; }
-
-    /* ── chips ─────────────────────────────────────────────────────────── */
     #ipic-chips {
       display: flex;
       flex-wrap: wrap;
@@ -208,10 +187,7 @@
       user-select: none;
       line-height: 1.4;
     }
-    .ipic-chip:hover {
-      border-color: ${T.accent};
-      color: ${T.text};
-    }
+    .ipic-chip:hover { border-color: ${T.accent}; color: ${T.text}; }
     .ipic-chip.on {
       background: ${T.accentLo};
       border-color: ${T.accent};
@@ -228,17 +204,12 @@
       flex-shrink: 0;
       transition: all .15s;
     }
-    .ipic-chip.on .ipic-chip-check {
-      background: ${T.accent};
-      border-color: ${T.accent};
-    }
+    .ipic-chip.on .ipic-chip-check { background: ${T.accent}; border-color: ${T.accent}; }
     .ipic-chip .ipic-chip-count {
       opacity: .5;
       font-size: .65rem;
       margin-left: 2px;
     }
-
-    /* ── preview ───────────────────────────────────────────────────────── */
     #ipic-preview {
       flex: 1;
       overflow-y: auto;
@@ -254,21 +225,12 @@
     #ipic-preview::-webkit-scrollbar { width: 4px; }
     #ipic-preview::-webkit-scrollbar-track { background: transparent; }
     #ipic-preview::-webkit-scrollbar-thumb { background: ${T.borderHi}; border-radius: 4px; }
-
-    .ipic-preview-sep {
-      color: ${T.muted};
-      font-weight: 400;
-    }
-    .ipic-preview-label {
-      color: ${T.accent};
-      font-weight: 600;
-    }
+    .ipic-preview-sep    { color: ${T.muted}; }
+    .ipic-preview-label  { color: ${T.accent}; font-weight: 600; }
     .ipic-preview-green  { color: ${T.green}; }
     .ipic-preview-red    { color: ${T.red}; }
     .ipic-preview-yellow { color: ${T.yellow}; }
     .ipic-preview-muted  { color: ${T.muted}; }
-
-    /* ── footer ────────────────────────────────────────────────────────── */
     #ipic-modal-footer {
       display: flex;
       align-items: center;
@@ -307,11 +269,7 @@
       border-color: ${T.accent};
     }
     #ipic-copy-btn:hover { filter: brightness(1.15); }
-    #ipic-copy-btn:disabled {
-      opacity: .4;
-      cursor: not-allowed;
-      filter: none;
-    }
+    #ipic-copy-btn:disabled { opacity: .4; cursor: not-allowed; filter: none; }
     #ipic-close-btn {
       background: transparent;
       color: ${T.muted};
@@ -320,7 +278,6 @@
     #ipic-close-btn:hover { color: ${T.text}; border-color: ${T.borderHi}; }
   `);
 
-  // ─── Persistent state ─────────────────────────────────────────────────────
   const STORAGE_KEY_SEL = 'ipic-selected-sections';
   const STORAGE_KEY_FMT = 'ipic-format';
 
@@ -335,31 +292,30 @@
     { id: 'safeHarbour', label: 'Safe Harbour' },
   ];
 
-  function defaultSelection() {
-    return ALL_SECTIONS.map(s => s.id);
-  }
+  function defaultSelection() { return ALL_SECTIONS.map(s => s.id); }
 
   function loadSelection() {
-    try { const v = JSON.parse(GM_getValue(STORAGE_KEY_SEL, '[]')); return Array.isArray(v) && v.length ? v : defaultSelection(); }
-    catch (_) { return defaultSelection(); }
+    try {
+      const v = JSON.parse(GM_getValue(STORAGE_KEY_SEL, '[]'));
+      return Array.isArray(v) && v.length ? v : defaultSelection();
+    } catch (_) { return defaultSelection(); }
   }
 
   function saveSelection(ids) {
-    try { GM_setValue(STORAGE_KEY_SEL, JSON.stringify(ids)); }
-    catch (_) {}
+    try { GM_setValue(STORAGE_KEY_SEL, JSON.stringify(ids)); } catch (_) {}
   }
 
   function loadFormat() {
-    try { const v = GM_getValue(STORAGE_KEY_FMT, 'plain'); return ['plain','json','csv','markdown'].includes(v) ? v : 'plain'; }
-    catch (_) { return 'plain'; }
+    try {
+      const v = GM_getValue(STORAGE_KEY_FMT, 'plain');
+      return ['plain', 'json', 'csv', 'markdown'].includes(v) ? v : 'plain';
+    } catch (_) { return 'plain'; }
   }
 
   function saveFormat(f) {
-    try { GM_setValue(STORAGE_KEY_FMT, f); }
-    catch (_) {}
+    try { GM_setValue(STORAGE_KEY_FMT, f); } catch (_) {}
   }
 
-  // ─── Toast ────────────────────────────────────────────────────────────────
   function showToast(msg, type) {
     let el = document.getElementById('ipic-toast');
     if (!el) {
@@ -374,12 +330,8 @@
     el._t = setTimeout(() => el.classList.remove('show'), 2600);
   }
 
-  // ─── Section data extractors ──────────────────────────────────────────────
-
   function extractProgramInfo() {
     const data = { name: '', company: '', status: '', confidentiality: '', industry: '', url: location.href };
-
-    // breadcrumbs → program name
     const bc = document.querySelector('.breadcrumbs');
     if (bc) {
       const parts = bc.querySelectorAll('span:not(.separator)');
@@ -390,52 +342,50 @@
         data.name = bc.textContent.replace(/\//g, '').trim();
       }
     }
-
-    // specific banner components (narrow, avoids hundreds of .label-container matches elsewhere)
     const statusLabel = document.querySelector('lib-program-status-label .copy');
     if (statusLabel) data.status = statusLabel.textContent.trim();
-
     const confLabel = document.querySelector('lib-program-confidentiality-label .copy');
     if (confLabel) data.confidentiality = confLabel.textContent.trim();
-
     const indLabel = document.querySelector('lib-industry-label .copy');
     if (indLabel) data.industry = indLabel.textContent.trim();
-
     return data;
   }
 
-  // ─── extractBountyRanges (reescrita) ─────────────────────────────────────
-  //
-  // Estrutura esperada no DOM da Intigriti:
-  //
-  //   lib-bounty-table-detail
-  //   └── lib-bounty-table-header
-  //   │   └── .column-header × N          ← severity columns (Critical, High, …)
-  //   │       ├── .label                  ← "Critical"
-  //   │       └── .scoring-range          ← "9.0 - 10.0"
-  //   └── lib-bounty-table-row × M        ← bounty tier rows (Tier 1, Tier 2, …)
-  //       ├── lib-bounty-tier-label       ← row label
-  //       └── .bounty-table-row-container
-  //           ├── .column × N (desktop)
-  //           │   └── .range-container
-  //           │       ├── span (min)
-  //           │       ├── span (separator "–")  ← may exist
-  //           │       └── span (max)
-  //           └── .mobile-row × N (mobile fallback)
-  //               └── .range-container
-  //
-  // Estratégia:
-  //   1. Extrair headers (severidades) uma vez
-  //   2. Para cada row, tentar desktop → mobile → regex, nessa ordem
-  //   3. Mapear cada valor pelo índice para a severidade correspondente
-  //   4. Nunca descartar uma row por label ausente — usar "Unknown (row N)"
-  //   5. Separar min/max filtrando spans que parecem separadores ("-", "–", "to")
+  const SEPARATOR_RE = /^[\-–—~]$|^to$/i;
+
+  function parseRangeContainer(rc) {
+    if (!rc) return { min: '', max: '' };
+
+    const spans = Array.from(rc.children).filter(el => {
+      const t = el.textContent.trim();
+      return t && !SEPARATOR_RE.test(t);
+    });
+
+    if (spans.length >= 2) {
+      return {
+        min: spans[0].textContent.trim(),
+        max: spans[spans.length - 1].textContent.trim(),
+      };
+    }
+
+    if (spans.length === 1) {
+      const raw = spans[0].textContent.trim();
+      const parts = raw.split(/\s*[-–—]\s*/);
+      if (parts.length >= 2) return { min: parts[0].trim(), max: parts[1].trim() };
+      return { min: raw, max: raw };
+    }
+
+    const raw = rc.textContent.trim();
+    const nums = raw.match(/[\d,.]+/g);
+    if (nums && nums.length >= 2) return { min: nums[0], max: nums[nums.length - 1] };
+    if (nums && nums.length === 1) return { min: nums[0], max: nums[0] };
+    return { min: '', max: '' };
+  }
 
   function extractBountyRanges() {
     const table = document.querySelector('lib-bounty-table-detail');
     if (!table) return [];
 
-    // ── 1. Headers ──────────────────────────────────────────────────────────
     const headers = [];
     const headerEl = table.querySelector('lib-bounty-table-header');
     if (headerEl) {
@@ -449,51 +399,13 @@
       });
     }
 
-    // ── helper: extrai min/max de um .range-container ──────────────────────
-    // Filtra spans que são separadores visuais (–, -, to, ~)
-    const SEPARATOR_RE = /^[\-–—~]$|^to$/i;
-
-    function parseRangeContainer(rc) {
-      if (!rc) return { min: '', max: '' };
-
-      // Tenta pegar só os spans filhos diretos com texto numérico
-      const spans = Array.from(rc.children).filter(el => {
-        const t = el.textContent.trim();
-        return t && !SEPARATOR_RE.test(t);
-      });
-
-      if (spans.length >= 2) {
-        return {
-          min: spans[0].textContent.trim(),
-          max: spans[spans.length - 1].textContent.trim(),
-        };
-      }
-
-      if (spans.length === 1) {
-        // pode ser "500 - 1000" num único span
-        const raw   = spans[0].textContent.trim();
-        const parts = raw.split(/\s*[-–—]\s*/);
-        if (parts.length >= 2) return { min: parts[0].trim(), max: parts[1].trim() };
-        return { min: raw, max: raw };
-      }
-
-      // fallback: regex no texto bruto do container
-      const raw  = rc.textContent.trim();
-      const nums = raw.match(/[\d,.]+/g);
-      if (nums && nums.length >= 2) return { min: nums[0], max: nums[nums.length - 1] };
-      if (nums && nums.length === 1) return { min: nums[0], max: nums[0] };
-      return { min: '', max: '' };
-    }
-
-    // ── helper: extrai valores de uma row por seletor de container ─────────
     function extractValues(row, containerSelector) {
       const containers = row.querySelectorAll(containerSelector);
       if (!containers.length) return null;
-
       const values = [];
       containers.forEach((rc, i) => {
         const { min, max } = parseRangeContainer(rc);
-        if (!min && !max) return; // pula colunas vazias (ex: N/A)
+        if (!min && !max) return;
         values.push({
           severity: headers[i] ? headers[i].severity : `col-${i}`,
           scoring:  headers[i] ? headers[i].scoring  : '',
@@ -501,13 +413,10 @@
           max,
         });
       });
-
       return values.length ? values : null;
     }
 
-    // ── helper: extrai label de uma row ────────────────────────────────────
     function extractRowLabel(el, index) {
-      // tenta os seletores mais específicos primeiro
       const selectors = [
         'lib-bounty-tier-label .copy',
         'lib-bounty-tier-label',
@@ -521,17 +430,14 @@
           if (text) return text;
         }
       }
-      return `Row ${index + 1}`; // nunca descarta a row
+      return `Row ${index + 1}`;
     }
 
-    // ── helper: detecta símbolo de moeda ───────────────────────────────────
     function extractCurrency(el) {
-      const raw = el.textContent;
-      const sym = raw.match(/[€$£¥₹]/);
+      const sym = el.textContent.match(/[€$£¥₹]/);
       return sym ? sym[0] : '€';
     }
 
-    // ── 2. Rows ─────────────────────────────────────────────────────────────
     const rowEls = table.querySelectorAll('lib-bounty-table-row');
     const parsedRows = [];
 
@@ -539,47 +445,35 @@
       const label    = extractRowLabel(el, index);
       const currency = extractCurrency(el);
 
-      // Tenta desktop primeiro, depois mobile, depois regex no container genérico
       const values =
         extractValues(el, '.bounty-table-row-container.desktop-view .column .range-container') ??
         extractValues(el, '.bounty-table-row-container:not(.mobile-view) .column .range-container') ??
         extractValues(el, '.mobile-row .range-container') ??
         extractValues(el, '.range-container');
 
-      if (!values) {
-        // Row existe mas sem valores (ex: N/A total) — ainda registra
-        parsedRows.push({ label, currency, values: [] });
-        return;
-      }
-
-      parsedRows.push({ label, currency, values });
+      parsedRows.push({ label, currency, values: values ?? [] });
     });
 
     return parsedRows;
   }
 
-
   function extractStats() {
     const stats = { submissions: '', accepted: '', avgPayout: '', totalPayouts: '', firstResponse: '', triage: '', decide: '' };
-    const containers = document.querySelectorAll('.section.stats-container');
-
-    containers.forEach(container => {
+    document.querySelectorAll('.section.stats-container').forEach(container => {
       const header = container.querySelector('.side-section-header .title');
       if (!header) return;
       const title = header.textContent.trim().toLowerCase();
-
       container.querySelectorAll('.stat').forEach(stat => {
         const label = stat.querySelector('.stat-header');
         const value = stat.querySelector('.stat-detail');
         if (!label || !value) return;
         const l = label.textContent.trim().toLowerCase();
         const v = value.textContent.trim();
-
         if (title.includes('overall')) {
-          if (l.includes('submissions received'))  stats.submissions = v;
+          if (l.includes('submissions received'))     stats.submissions = v;
           else if (l.includes('accepted submissions')) stats.accepted = v;
-          else if (l.includes('average payout'))    stats.avgPayout = v;
-          else if (l.includes('total payouts'))     stats.totalPayouts = v;
+          else if (l.includes('average payout'))      stats.avgPayout = v;
+          else if (l.includes('total payouts'))        stats.totalPayouts = v;
         } else if (title.includes('response')) {
           if (l.includes('first response'))  stats.firstResponse = v;
           else if (l.includes('triage'))     stats.triage = v;
@@ -587,34 +481,17 @@
         }
       });
     });
-
     return stats;
-  }
-
-  function extractLeaderboard() {
-    const researchers = [];
-    const container = document.querySelector('.leaderboard-and-contributors-container');
-    if (!container) return researchers;
-
-    container.querySelectorAll('.researcher .researcher-name').forEach(el => {
-      const name = el.textContent.trim();
-      if (name) researchers.push(name);
-    });
-
-    return researchers;
   }
 
   function extractOosVulns() {
     const items = [];
-    // Find the "Out of scope" detail box
-    const detailBoxes = document.querySelectorAll('lib-researcher-program-detail-box');
-    for (const box of detailBoxes) {
+    for (const box of document.querySelectorAll('lib-researcher-program-detail-box')) {
       const header = box.querySelector('.detail-header span');
       if (header && header.textContent.trim().toLowerCase().includes('out of scope')) {
         const marked = box.querySelector('lib-markdown-viewer .marked');
         if (marked) {
-          const lis = marked.querySelectorAll('ul li');
-          lis.forEach(li => {
+          marked.querySelectorAll('ul li').forEach(li => {
             const text = li.textContent.trim();
             if (text) items.push(text);
           });
@@ -627,11 +504,9 @@
 
   function extractSafeHarbour() {
     const el = document.querySelector('app-program-safe-harbour-detail .safe-harbour-applied');
-    if (!el) return '';
-    return el.textContent.trim();
+    return el ? el.textContent.trim() : '';
   }
 
-  // ─── Asset extraction (existing, improved) ────────────────────────────────
   function waitForAssets(timeout = 10000) {
     return new Promise((resolve, reject) => {
       const start = Date.now();
@@ -677,22 +552,18 @@
     return { inScope, outOfScope };
   }
 
-  // ─── Master collector ─────────────────────────────────────────────────────
   async function collectAll() {
-    const [assets, program, bounty, stats, leaderboard, oosVulns, safeHarbour] = await Promise.all([
+    const [assets, program, bounty, stats, oosVulns, safeHarbour] = await Promise.all([
       collectAssets(),
       Promise.resolve(extractProgramInfo()),
       Promise.resolve(extractBountyRanges()),
       Promise.resolve(extractStats()),
-      Promise.resolve(extractLeaderboard()),
       Promise.resolve(extractOosVulns()),
       Promise.resolve(extractSafeHarbour()),
     ]);
-
-    return { program, bounty, stats, leaderboard, oosVulns, safeHarbour, assets };
+    return { program, bounty, stats, oosVulns, safeHarbour, assets };
   }
 
-  // ─── Formatters ───────────────────────────────────────────────────────────
   function csvEscape(v) {
     const s = String(v ?? '');
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -715,28 +586,25 @@
       const p = data.program;
       lines.push('───────────────────────────────────────────────────────────────');
       lines.push(`  Program:  ${p.company}${p.name && p.company !== p.name ? ` / ${p.name}` : ''}`);
-      if (p.status)         lines.push(`  Status:   ${p.status}`);
+      if (p.status)          lines.push(`  Status:   ${p.status}`);
       if (p.confidentiality) lines.push(`  Type:     ${p.confidentiality}`);
-      if (p.industry)       lines.push(`  Sector:   ${p.industry}`);
+      if (p.industry)        lines.push(`  Sector:   ${p.industry}`);
       lines.push(`  URL:      ${p.url}`);
       lines.push('───────────────────────────────────────────────────────────────');
     }
 
     if (has('bounty') && data.bounty.length) {
-      lines.push(`  BOUNTY RANGES`);
-      const allSevs = [...new Set(data.bounty.flatMap(r => r.values.map(v => v.severity)))].filter(Boolean);
-      const sevMaxLen = allSevs.length ? Math.max(...allSevs.map(s => s.length), 8) : 0;
-
+      lines.push('  BOUNTY RANGES');
       data.bounty.forEach(row => {
         lines.push(`    ${row.label}`);
+        if (!row.values.length) {
+          lines.push(`      (no data)`);
+          return;
+        }
+        const sevLen = Math.max(...row.values.map(v => (v.severity + (v.scoring ? ` (${v.scoring})` : '')).length), 0);
         row.values.forEach(v => {
-          if (!v.min && !v.max) return;
-          if (v.severity && sevMaxLen) {
-            const sev = v.severity.padEnd(sevMaxLen);
-            lines.push(`      ${sev}  ${row.currency} ${v.min} - ${v.max}`);
-          } else {
-            lines.push(`      ${row.currency} ${v.min} - ${v.max}`);
-          }
+          const label = v.severity + (v.scoring ? ` (${v.scoring})` : '');
+          lines.push(`      ${label.padEnd(sevLen)}  ${row.currency} ${v.min} – ${v.max}`);
         });
       });
       lines.push('');
@@ -744,23 +612,17 @@
 
     if (has('stats')) {
       const s = data.stats;
-      lines.push(`  STATS`);
+      lines.push('  STATS');
       if (s.submissions)  lines.push(`    submissions:   ${s.submissions}`);
       if (s.accepted)     lines.push(`    accepted:      ${s.accepted}`);
       if (s.avgPayout)    lines.push(`    avg payout:    ${s.avgPayout}`);
       if (s.totalPayouts) lines.push(`    total payouts: ${s.totalPayouts}`);
-      if (s.firstResponse || s.triage || s.decide) {
-        lines.push(`    response times:`);
-        if (s.firstResponse) lines.push(`      first response: ${s.firstResponse}`);
-        if (s.triage)        lines.push(`      triage:         ${s.triage}`);
-        if (s.decide)        lines.push(`      decide:         ${s.decide}`);
-      }
       lines.push('');
     }
 
     if (has('response')) {
-      lines.push(`  RESPONSE TIMES`);
       const s = data.stats;
+      lines.push('  RESPONSE TIMES');
       if (s.firstResponse) lines.push(`    first response:  ${s.firstResponse}`);
       if (s.triage)        lines.push(`    triage:          ${s.triage}`);
       if (s.decide)        lines.push(`    decide:          ${s.decide}`);
@@ -768,31 +630,29 @@
     }
 
     if (has('assetsIn') && data.assets.inScope.length) {
-      lines.push(`  ASSETS (IN-SCOPE)`);
+      lines.push('  ASSETS (IN-SCOPE)');
       data.assets.inScope.forEach(a => {
-        const type = a.type ? `  [${a.type}]` : '';
-        lines.push(`    • ${a.name}${type}`);
+        lines.push(`    • ${a.name}${a.type ? `  [${a.type}]` : ''}`);
       });
       lines.push('');
     }
 
     if (has('assetsOos') && data.assets.outOfScope.length) {
-      lines.push(`  ASSETS (OUT-OF-SCOPE)`);
+      lines.push('  ASSETS (OUT-OF-SCOPE)');
       data.assets.outOfScope.forEach(a => {
-        const type = a.type ? `  [${a.type}]` : '';
-        lines.push(`    • ${a.name}${type}`);
+        lines.push(`    • ${a.name}${a.type ? `  [${a.type}]` : ''}`);
       });
       lines.push('');
     }
 
     if (has('oosVulns') && data.oosVulns.length) {
-      lines.push(`  OUT-OF-SCOPE VULNERABILITIES`);
+      lines.push('  OUT-OF-SCOPE VULNERABILITIES');
       data.oosVulns.forEach(v => lines.push(`    • ${v}`));
       lines.push('');
     }
 
     if (has('safeHarbour') && data.safeHarbour) {
-      lines.push(`  SAFE HARBOUR`);
+      lines.push('  SAFE HARBOUR');
       lines.push(`    ${data.safeHarbour}`);
       lines.push('');
     }
@@ -807,9 +667,9 @@
     if (has('program')) {
       const p = data.program;
       lines.push(`## ${p.company}${p.name && p.company !== p.name ? ` / ${p.name}` : ''}`);
-      if (p.status)         lines.push(`- **Status:** ${p.status}`);
+      if (p.status)          lines.push(`- **Status:** ${p.status}`);
       if (p.confidentiality) lines.push(`- **Type:** ${p.confidentiality}`);
-      if (p.industry)       lines.push(`- **Sector:** ${p.industry}`);
+      if (p.industry)        lines.push(`- **Sector:** ${p.industry}`);
       lines.push(`- **URL:** [${p.url}](${p.url})`);
       lines.push('');
     }
@@ -818,13 +678,10 @@
       lines.push('### Bounty Ranges');
       data.bounty.forEach(row => {
         lines.push(`**${row.label}**`);
+        if (!row.values.length) { lines.push('- (no data)'); return; }
         row.values.forEach(v => {
-          if (!v.min && !v.max) return;
-          if (v.severity) {
-            lines.push(`- ${v.severity}: ${row.currency} ${v.min} - ${v.max}`);
-          } else {
-            lines.push(`- ${row.currency} ${v.min} - ${v.max}`);
-          }
+          const scoring = v.scoring ? ` (${v.scoring})` : '';
+          lines.push(`- ${v.severity}${scoring}: ${row.currency} ${v.min} – ${v.max}`);
         });
       });
       lines.push('');
@@ -837,18 +694,12 @@
       if (s.accepted)     lines.push(`- **Accepted:** ${s.accepted}`);
       if (s.avgPayout)    lines.push(`- **Avg Payout:** ${s.avgPayout}`);
       if (s.totalPayouts) lines.push(`- **Total Payouts:** ${s.totalPayouts}`);
-      if (s.firstResponse || s.triage || s.decide) {
-        lines.push('- **Response Times:**');
-        if (s.firstResponse) lines.push(`  - First response: ${s.firstResponse}`);
-        if (s.triage)        lines.push(`  - Triage: ${s.triage}`);
-        if (s.decide)        lines.push(`  - Decide: ${s.decide}`);
-      }
       lines.push('');
     }
 
     if (has('response')) {
-      lines.push('### Response Times');
       const r = data.stats;
+      lines.push('### Response Times');
       if (r.firstResponse) lines.push(`- **First Response:** ${r.firstResponse}`);
       if (r.triage)        lines.push(`- **Triage:** ${r.triage}`);
       if (r.decide)        lines.push(`- **Decide:** ${r.decide}`);
@@ -858,8 +709,7 @@
     if (has('assetsIn') && data.assets.inScope.length) {
       lines.push('### Assets (In-Scope)');
       data.assets.inScope.forEach(a => {
-        const type = a.type ? ` [${a.type}]` : '';
-        lines.push(`- \`${a.name}\`${type}`);
+        lines.push(`- \`${a.name}\`${a.type ? ` [${a.type}]` : ''}`);
       });
       lines.push('');
     }
@@ -867,8 +717,7 @@
     if (has('assetsOos') && data.assets.outOfScope.length) {
       lines.push('### Assets (Out-of-Scope)');
       data.assets.outOfScope.forEach(a => {
-        const type = a.type ? ` [${a.type}]` : '';
-        lines.push(`- \`${a.name}\`${type}`);
+        lines.push(`- \`${a.name}\`${a.type ? ` [${a.type}]` : ''}`);
       });
       lines.push('');
     }
@@ -903,21 +752,18 @@
 
   function formatCsv(data, sel) {
     const rows = [];
-    if (sel.includes('assetsIn')) {
+    if (sel.includes('assetsIn') || sel.includes('assetsOos')) {
       rows.push(['name', 'type', 'tier', 'scope']);
-      data.assets.inScope.forEach(a => rows.push([a.name, a.type, a.tier, 'in-scope']));
+      if (sel.includes('assetsIn'))  data.assets.inScope.forEach(a => rows.push([a.name, a.type, a.tier, 'in-scope']));
+      if (sel.includes('assetsOos')) data.assets.outOfScope.forEach(a => rows.push([a.name, a.type, a.tier, 'out-of-scope']));
     }
-    if (sel.includes('assetsOos')) {
-      if (!rows.length) rows.push(['name', 'type', 'tier', 'scope']);
-      data.assets.outOfScope.forEach(a => rows.push([a.name, a.type, a.tier, 'out-of-scope']));
-    }
-    if (sel.includes('bounty')) {
-      rows.push(['category', 'severity', 'currency', 'min', 'max']);
+    if (sel.includes('bounty') && data.bounty.length) {
+      rows.push(['category', 'severity', 'scoring', 'currency', 'min', 'max']);
       data.bounty.forEach(b => {
-        b.values.forEach(v => rows.push([b.label, v.severity, b.currency, v.min, v.max]));
+        b.values.forEach(v => rows.push([b.label, v.severity, v.scoring, b.currency, v.min, v.max]));
       });
     }
-    if (sel.includes('oosVulns')) {
+    if (sel.includes('oosVulns') && data.oosVulns.length) {
       rows.push(['out_of_scope_vulnerability']);
       data.oosVulns.forEach(v => rows.push([v]));
     }
@@ -929,24 +775,22 @@
       if (s.avgPayout)    rows.push(['avg_payout', s.avgPayout]);
       if (s.totalPayouts) rows.push(['total_payouts', s.totalPayouts]);
     }
-    if (rows.length === 0) return '';
     return rows.map(r => r.map(csvEscape).join(',')).join('\n');
   }
 
-  // ─── Render helper (plain colorized preview) ──────────────────────────────
   function renderPreview(text) {
     return text
       .replace(/(Program|Status|Type|Sector|URL):/g, '<span class="ipic-preview-label">$1:</span>')
-      .replace(/BOUNTY RANGES/g,  '<span class="ipic-preview-label">BOUNTY RANGES</span>')
-      .replace(/STATS/g,          '<span class="ipic-preview-label">STATS</span>')
-      .replace(/RESPONSE/g,       '<span class="ipic-preview-label">RESPONSE</span>')
-      .replace(/IN-SCOPE/g,       '<span class="ipic-preview-green">IN-SCOPE</span>')
-      .replace(/OUT-OF-SCOPE/g,   '<span class="ipic-preview-red">OUT-OF-SCOPE</span>')
-      .replace(/SAFE HARBOUR/g,   '<span class="ipic-preview-label">SAFE HARBOUR</span>')
-      .replace(/─+/g,             m => `<span class="ipic-preview-sep">${m}</span>`);
+      .replace(/BOUNTY RANGES/g,               '<span class="ipic-preview-label">BOUNTY RANGES</span>')
+      .replace(/STATS/g,                        '<span class="ipic-preview-label">STATS</span>')
+      .replace(/RESPONSE TIMES/g,              '<span class="ipic-preview-label">RESPONSE TIMES</span>')
+      .replace(/ASSETS \(IN-SCOPE\)/g,         '<span class="ipic-preview-green">ASSETS (IN-SCOPE)</span>')
+      .replace(/ASSETS \(OUT-OF-SCOPE\)/g,     '<span class="ipic-preview-red">ASSETS (OUT-OF-SCOPE)</span>')
+      .replace(/OUT-OF-SCOPE VULNERABILITIES/g,'<span class="ipic-preview-red">OUT-OF-SCOPE VULNERABILITIES</span>')
+      .replace(/SAFE HARBOUR/g,                '<span class="ipic-preview-label">SAFE HARBOUR</span>')
+      .replace(/─+/g, m => `<span class="ipic-preview-sep">${m}</span>`);
   }
 
-  // ─── Modal ────────────────────────────────────────────────────────────────
   function showModal(data) {
     const existing = document.getElementById('ipic-overlay');
     if (existing) existing.remove();
@@ -954,7 +798,6 @@
     let selectedFormat = loadFormat();
     let selectedSections = loadSelection();
 
-    // stats and response share the same data source — deduplicate on selection
     const overlay = document.createElement('div');
     overlay.id = 'ipic-overlay';
     overlay.innerHTML = `
@@ -998,8 +841,6 @@
       if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); }
     });
 
-    // add stats and response as mutually exclusive? No, keep separate
-
     function chipCount(id) {
       switch (id) {
         case 'assetsIn':  return data.assets.inScope.length;
@@ -1012,14 +853,12 @@
 
     function renderChips() {
       chips.innerHTML = '';
-      // select / deselect all
       const allBtn = document.createElement('div');
       allBtn.className = 'ipic-chip' + (selectedSections.length === ALL_SECTIONS.length ? ' on' : '');
       allBtn.style.borderStyle = 'dashed';
       allBtn.innerHTML = `<span class="ipic-chip-check">${selectedSections.length === ALL_SECTIONS.length ? '✓' : ''}</span> all`;
       allBtn.addEventListener('click', () => {
-        selectedSections = selectedSections.length === ALL_SECTIONS.length ? [] : [...ALL_SECTIONS.map(s => s.id)];
-        if (!selectedSections.length) selectedSections = [ALL_SECTIONS[0].id];
+        selectedSections = selectedSections.length === ALL_SECTIONS.length ? [ALL_SECTIONS[0].id] : ALL_SECTIONS.map(s => s.id);
         saveSelection(selectedSections);
         renderChips();
         updatePreview();
@@ -1040,7 +879,7 @@
           const id = chip.getAttribute('data-id');
           const idx = selectedSections.indexOf(id);
           if (idx >= 0) {
-            if (selectedSections.length <= 1) return; // keep at least one
+            if (selectedSections.length <= 1) return;
             selectedSections.splice(idx, 1);
           } else {
             selectedSections.push(id);
@@ -1076,33 +915,26 @@
       const text = formatSelected(data, selectedSections, selectedFormat);
       if (!text) { showToast('nothing to copy', 'err'); return; }
       GM_setClipboard(text);
-      const count = selectedSections.length;
-      showToast(`copied — ${count} section${count !== 1 ? 's' : ''}`, 'ok');
+      showToast(`copied — ${selectedSections.length} section${selectedSections.length !== 1 ? 's' : ''}`, 'ok');
       copyBtn.textContent = '✓ copied';
-      setTimeout(() => { if (document.getElementById('ipic-copy-btn')) document.getElementById('ipic-copy-btn').textContent = 'copy selected'; }, 2000);
+      setTimeout(() => {
+        const btn = document.getElementById('ipic-copy-btn');
+        if (btn) btn.textContent = 'copy selected';
+      }, 2000);
     });
 
     renderChips();
     updatePreview();
   }
 
-  // ─── Button ───────────────────────────────────────────────────────────────
   function injectButton() {
     if (document.getElementById('ipic-btn')) return;
-
     const btn = document.createElement('button');
     btn.id = 'ipic-btn';
-
-    // Minimal dot + eye icon
-    btn.innerHTML = `
-      <div class="ipic-dot"></div>
-      <span class="ipic-btn-label">program info</span>
-    `;
-
+    btn.innerHTML = `<div class="ipic-dot"></div><span class="ipic-btn-label">program info</span>`;
     btn.addEventListener('click', async () => {
       btn.style.opacity = '.4';
       btn.style.pointerEvents = 'none';
-
       try {
         const data = await collectAll();
         const totalAssets = data.assets.inScope.length + data.assets.outOfScope.length;
@@ -1118,11 +950,9 @@
         btn.style.pointerEvents = '';
       }
     });
-
     document.body.appendChild(btn);
   }
 
-  // ─── Init (SPA-aware) ────────────────────────────────────────────────────
   let lastUrl = location.href;
   const observer = new MutationObserver(() => {
     if (location.href !== lastUrl) {
