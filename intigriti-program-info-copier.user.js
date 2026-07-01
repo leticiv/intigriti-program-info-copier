@@ -404,23 +404,159 @@
     return data;
   }
 
+// ─── extractBountyRanges (reescrita) ─────────────────────────────────────
+  //
+  // Estrutura esperada no DOM da Intigriti:
+  //
+  //   lib-bounty-table-detail
+  //   └── lib-bounty-table-header
+  //   │   └── .column-header × N          ← severity columns (Critical, High, …)
+  //   │       ├── .label                  ← "Critical"
+  //   │       └── .scoring-range          ← "9.0 - 10.0"
+  //   └── lib-bounty-table-row × M        ← bounty tier rows (Tier 1, Tier 2, …)
+  //       ├── lib-bounty-tier-label       ← row label
+  //       └── .bounty-table-row-container
+  //           ├── .column × N (desktop)
+  //           │   └── .range-container
+  //           │       ├── span (min)
+  //           │       ├── span (separator "–")  ← may exist
+  //           │       └── span (max)
+  //           └── .mobile-row × N (mobile fallback)
+  //               └── .range-container
+  //
+  // Estratégia:
+  //   1. Extrair headers (severidades) uma vez
+  //   2. Para cada row, tentar desktop → mobile → regex, nessa ordem
+  //   3. Mapear cada valor pelo índice para a severidade correspondente
+  //   4. Nunca descartar uma row por label ausente — usar "Unknown (row N)"
+  //   5. Separar min/max filtrando spans que parecem separadores ("-", "–", "to")
+
   function extractBountyRanges() {
     const table = document.querySelector('lib-bounty-table-detail');
     if (!table) return [];
 
-    // parse column headers → severity names + CVSS scoring ranges
+    // ── 1. Headers ──────────────────────────────────────────────────────────
     const headers = [];
     const headerEl = table.querySelector('lib-bounty-table-header');
     if (headerEl) {
       headerEl.querySelectorAll('.column-header').forEach(ch => {
-        const name = ch.querySelector('.label');
-        const score = ch.querySelector('.scoring-range');
-        if (name) headers.push({
-          severity: name.textContent.trim(),
-          scoring: score ? score.textContent.trim() : '',
+        const name    = ch.querySelector('.label');
+        const scoring = ch.querySelector('.scoring-range');
+        headers.push({
+          severity: name    ? name.textContent.trim()    : '',
+          scoring:  scoring ? scoring.textContent.trim() : '',
         });
       });
     }
+
+    // ── helper: extrai min/max de um .range-container ──────────────────────
+    // Filtra spans que são separadores visuais (–, -, to, ~)
+    const SEPARATOR_RE = /^[\-–—~]$|^to$/i;
+
+    function parseRangeContainer(rc) {
+      if (!rc) return { min: '', max: '' };
+
+      // Tenta pegar só os spans filhos diretos com texto numérico
+      const spans = Array.from(rc.children).filter(el => {
+        const t = el.textContent.trim();
+        return t && !SEPARATOR_RE.test(t);
+      });
+
+      if (spans.length >= 2) {
+        return {
+          min: spans[0].textContent.trim(),
+          max: spans[spans.length - 1].textContent.trim(),
+        };
+      }
+
+      if (spans.length === 1) {
+        // pode ser "500 - 1000" num único span
+        const raw   = spans[0].textContent.trim();
+        const parts = raw.split(/\s*[-–—]\s*/);
+        if (parts.length >= 2) return { min: parts[0].trim(), max: parts[1].trim() };
+        return { min: raw, max: raw };
+      }
+
+      // fallback: regex no texto bruto do container
+      const raw  = rc.textContent.trim();
+      const nums = raw.match(/[\d,.]+/g);
+      if (nums && nums.length >= 2) return { min: nums[0], max: nums[nums.length - 1] };
+      if (nums && nums.length === 1) return { min: nums[0], max: nums[0] };
+      return { min: '', max: '' };
+    }
+
+    // ── helper: extrai valores de uma row por seletor de container ─────────
+    function extractValues(row, containerSelector) {
+      const containers = row.querySelectorAll(containerSelector);
+      if (!containers.length) return null;
+
+      const values = [];
+      containers.forEach((rc, i) => {
+        const { min, max } = parseRangeContainer(rc);
+        if (!min && !max) return; // pula colunas vazias (ex: N/A)
+        values.push({
+          severity: headers[i] ? headers[i].severity : `col-${i}`,
+          scoring:  headers[i] ? headers[i].scoring  : '',
+          min,
+          max,
+        });
+      });
+
+      return values.length ? values : null;
+    }
+
+    // ── helper: extrai label de uma row ────────────────────────────────────
+    function extractRowLabel(el, index) {
+      // tenta os seletores mais específicos primeiro
+      const selectors = [
+        'lib-bounty-tier-label .copy',
+        'lib-bounty-tier-label',
+        '.row-label .tier',
+        '.row-label',
+      ];
+      for (const sel of selectors) {
+        const node = el.querySelector(sel);
+        if (node) {
+          const text = node.textContent.trim();
+          if (text) return text;
+        }
+      }
+      return `Row ${index + 1}`; // nunca descarta a row
+    }
+
+    // ── helper: detecta símbolo de moeda ───────────────────────────────────
+    function extractCurrency(el) {
+      const raw = el.textContent;
+      const sym = raw.match(/[€$£¥₹]/);
+      return sym ? sym[0] : '€';
+    }
+
+    // ── 2. Rows ─────────────────────────────────────────────────────────────
+    const rowEls = table.querySelectorAll('lib-bounty-table-row');
+    const parsedRows = [];
+
+    rowEls.forEach((el, index) => {
+      const label    = extractRowLabel(el, index);
+      const currency = extractCurrency(el);
+
+      // Tenta desktop primeiro, depois mobile, depois regex no container genérico
+      const values =
+        extractValues(el, '.bounty-table-row-container.desktop-view .column .range-container') ??
+        extractValues(el, '.bounty-table-row-container:not(.mobile-view) .column .range-container') ??
+        extractValues(el, '.mobile-row .range-container') ??
+        extractValues(el, '.range-container');
+
+      if (!values) {
+        // Row existe mas sem valores (ex: N/A total) — ainda registra
+        parsedRows.push({ label, currency, values: [] });
+        return;
+      }
+
+      parsedRows.push({ label, currency, values });
+    });
+
+    return parsedRows;
+  }
 
     // parse each row
     const rowEls = table.querySelectorAll('lib-bounty-table-row');
