@@ -404,7 +404,7 @@
     return data;
   }
 
-// ─── extractBountyRanges (reescrita) ─────────────────────────────────────
+  // ─── extractBountyRanges (reescrita) ─────────────────────────────────────
   //
   // Estrutura esperada no DOM da Intigriti:
   //
@@ -558,73 +558,6 @@
     return parsedRows;
   }
 
-    // parse each row
-    const rowEls = table.querySelectorAll('lib-bounty-table-row');
-    const parsedRows = [];
-    rowEls.forEach(el => {
-      const tierLabel = el.querySelector('lib-bounty-tier-label .copy, lib-bounty-tier-label');
-      const label = tierLabel ? tierLabel.textContent.trim() : '';
-      if (!label) return;
-
-      const currencyEl = el.querySelector('.row-label .currency');
-      const rawCurrency = currencyEl ? currencyEl.textContent.trim() : '';
-      const sym = rawCurrency.match(/[€$£¥]/);
-      const currency = sym ? sym[0] : '€';
-
-      // Try column-mapped extraction first
-      const columns = el.querySelectorAll('.bounty-table-row-container.desktop-view > .column');
-      let values = [];
-      if (columns.length) {
-        columns.forEach((col, i) => {
-          const rc = col.querySelector('.range-container');
-          if (!rc) return;
-          const parts = rc.children;
-          const min = parts[0] ? parts[0].textContent.trim() : '';
-          const max = parts[1] ? parts[1].textContent.trim() : '';
-          values.push({
-            severity: headers[i] ? headers[i].severity : `col-${i}`,
-            min, max,
-          });
-        });
-      }
-
-      // Fallback 1: direct .range-container children
-      if (!values.length) {
-        const ranges = el.querySelectorAll('.range-container');
-        ranges.forEach(rc => {
-          const parts = rc.children;
-          const min = parts[0] ? parts[0].textContent.trim() : '';
-          const max = parts[1] ? parts[1].textContent.trim() : '';
-          values.push({ severity: '', min, max });
-        });
-      }
-
-      // Fallback 2: raw text of .range-container (regex number extraction)
-      if (!values.length) {
-        const ranges = el.querySelectorAll('.range-container');
-        ranges.forEach(rc => {
-          const raw = rc.textContent.trim();
-          const nums = raw.match(/[\d,.]+/g);
-          if (nums) {
-            values.push({ severity: '', min: nums[0] || '', max: nums[1] || '' });
-          }
-        });
-      }
-
-      parsedRows.push({ label, currency, values });
-    });
-
-    // if no rows but headers exist, return headers as fallback
-    if (!parsedRows.length && headers.length) {
-      return headers.map(h => ({
-        label: h.severity,
-        currency: '€',
-        values: [{ severity: h.severity, min: '', max: '' }],
-      }));
-    }
-
-    return parsedRows;
-  }
 
   function extractStats() {
     const stats = { submissions: '', accepted: '', avgPayout: '', totalPayouts: '', firstResponse: '', triage: '', decide: '' };
