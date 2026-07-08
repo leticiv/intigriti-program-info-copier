@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Intigriti — Program Info Copier
 // @namespace    https://github.com/leticiv/intigriti-program-info-copier
-// @version      3.1.0
+// @version      3.2.0
 // @description  Extrai todas as informações de um programa Intigriti com seleção de seções e copia formatado
 // @author       leticiv
 // @match        https://app.intigriti.com/programs/*
@@ -308,7 +308,7 @@
   function loadFormat() {
     try {
       const v = GM_getValue(STORAGE_KEY_FMT, 'plain');
-      return ['plain', 'json', 'csv', 'markdown'].includes(v) ? v : 'plain';
+      return ['plain', 'json', 'csv', 'markdown', 'burp'].includes(v) ? v : 'plain';
     } catch (_) { return 'plain'; }
   }
 
@@ -569,11 +569,72 @@
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   }
 
+  // ─── Burp Suite scope ────────────────────────────────────────────────────────
+
+  function assetToBurpEntries(asset) {
+    const name = asset.name.trim();
+    let protocol = null;
+    let host = name;
+    let file = '^/.*';
+
+    if (/^https?:\/\//i.test(name)) {
+      try {
+        const url = new URL(name);
+        protocol  = url.protocol.replace(':', '');
+        host      = url.hostname;
+        const p   = url.pathname;
+        file      = p && p !== '/' ? `^${p.replace(/\./g, '\\.')}.*` : '^/.*';
+      } catch (_) {}
+    }
+
+    // escapa dots e converte wildcards → regex
+    const regexHost = `^${host.replace(/\./g, '\\.').replace(/\*/g, '.*')}$`;
+
+    if (protocol === 'http')  return [{ enabled: true, file, host: regexHost, port: '^80$',  protocol: 'http'  }];
+    if (protocol === 'https') return [{ enabled: true, file, host: regexHost, port: '^443$', protocol: 'https' }];
+    return [
+      { enabled: true, file, host: regexHost, port: '^80$',  protocol: 'http'  },
+      { enabled: true, file, host: regexHost, port: '^443$', protocol: 'https' },
+    ];
+  }
+
+  function burpFilename(program) {
+    // combina company + name para especificidade máxima
+    // ex: "DDF Network" + "Pornbox" → "burp-scope-ddf-network-pornbox.json"
+    const parts = [program.company, program.name]
+      .map(s => (s || '').trim())
+      .filter(Boolean);
+
+    // deduplica se company === name
+    const unique = parts.filter((v, i, arr) => i === 0 || v.toLowerCase() !== arr[i - 1].toLowerCase());
+
+    const slug = unique
+      .join('-')
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-{2,}/g, '-')
+      .replace(/^-|-$/g, '') || 'program';
+
+    return `burp-scope-${slug}.json`;
+  }
+
+  function formatBurp(data, sel) {
+    const include = [];
+    const exclude = [];
+    if (sel.includes('assetsIn'))  data.assets.inScope.forEach(a    => assetToBurpEntries(a).forEach(e => include.push(e)));
+    if (sel.includes('assetsOos')) data.assets.outOfScope.forEach(a => assetToBurpEntries(a).forEach(e => exclude.push(e)));
+    return JSON.stringify({ target: { scope: { advanced_mode: true, exclude, include } } }, null, 2);
+  }
+
+  // ─── Formatters ──────────────────────────────────────────────────────────────
+
   function formatSelected(data, selectedIds, format) {
     switch (format) {
       case 'json':     return formatJson(data, selectedIds);
       case 'csv':      return formatCsv(data, selectedIds);
       case 'markdown': return formatMarkdown(data, selectedIds);
+      case 'burp':     return formatBurp(data, selectedIds);
       default:         return formatPlain(data, selectedIds);
     }
   }
@@ -815,6 +876,7 @@
               <option value="markdown">markdown</option>
               <option value="json">json</option>
               <option value="csv">csv</option>
+              <option value="burp">burp suite</option>
             </select>
             <span id="ipic-copy-count" style="font-size:.7rem;color:${T.muted};font-weight:500;"></span>
             <div class="ipic-spacer"></div>
@@ -892,16 +954,34 @@
       });
     }
 
+    // ── Download Burp scope ────────────────────────────────────────────────────
+    function downloadBurp() {
+      const text     = formatBurp(data, selectedSections);
+      const filename = burpFilename(data.program);
+      const blob     = new Blob([text], { type: 'application/json' });
+      const url      = URL.createObjectURL(blob);
+      const a        = document.createElement('a');
+      a.href         = url;
+      a.download     = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`↓ ${filename}`, 'ok');
+    }
+
     function updatePreview() {
-      const text = formatSelected(data, selectedSections, selectedFormat);
+      const isBurp = selectedFormat === 'burp';
+      const text   = formatSelected(data, selectedSections, selectedFormat);
+
       if (selectedFormat === 'plain') {
         preview.innerHTML = renderPreview(text);
       } else {
         preview.textContent = text;
       }
+
       const count = selectedSections.length;
       countSpan.textContent = `${count} section${count !== 1 ? 's' : ''}`;
-      copyBtn.disabled = !text;
+      copyBtn.disabled      = !text;
+      copyBtn.textContent   = isBurp ? '↓ download scope' : 'copy selected';
     }
 
     formatSel.value = selectedFormat;
@@ -912,6 +992,10 @@
     });
 
     copyBtn.addEventListener('click', () => {
+      if (selectedFormat === 'burp') {
+        downloadBurp();
+        return;
+      }
       const text = formatSelected(data, selectedSections, selectedFormat);
       if (!text) { showToast('nothing to copy', 'err'); return; }
       GM_setClipboard(text);
