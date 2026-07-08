@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Intigriti — Program Info Copier
 // @namespace    https://github.com/leticiv/intigriti-program-info-copier
-// @version      3.2.0
-// @description  Extrai todas as informações de um programa Intigriti com seleção de seções e copia formatado
+// @version      3.3.0
+// @description  Extrai todas as informações de um programa Intigriti com seleção de seções e copia formatado, incluindo exportação de escopo para Burp Suite
 // @author       leticiv
 // @match        https://app.intigriti.com/programs/*
 // @match        https://app.intigriti.com/researcher/programs/*
@@ -570,42 +570,45 @@
   }
 
   // ─── Burp Suite scope ────────────────────────────────────────────────────────
+  // Usa regex manual em vez de new URL() porque assets wildcard tipo
+  // "https://*.example.com/*" quebram o URL constructor.
 
   function assetToBurpEntries(asset) {
-    const name = asset.name.trim();
+    let name = asset.name.trim();
     let protocol = null;
     let host = name;
     let file = '^/.*';
 
-    if (/^https?:\/\//i.test(name)) {
-      try {
-        const url = new URL(name);
-        protocol  = url.protocol.replace(':', '');
-        host      = url.hostname;
-        const p   = url.pathname;
-        file      = p && p !== '/' ? `^${p.replace(/\./g, '\\.')}.*` : '^/.*';
-      } catch (_) {}
+    const protoMatch = name.match(/^(https?):\/\/(.+)/i);
+    if (protoMatch) {
+      protocol = protoMatch[1].toLowerCase();
+      let rest = protoMatch[2];
+      const slashIdx = rest.indexOf('/');
+      if (slashIdx !== -1) {
+        const rawPath = rest.substring(slashIdx);
+        host = rest.substring(0, slashIdx);
+        file = '^' + rawPath.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+        if (!rawPath.includes('*')) file += '.*';
+      } else {
+        host = rest;
+      }
     }
 
-    // escapa dots e converte wildcards → regex
-    const regexHost = `^${host.replace(/\./g, '\\.').replace(/\*/g, '.*')}$`;
+    const regexHost = '^' + host.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$';
 
-    if (protocol === 'http')  return [{ enabled: true, file, host: regexHost, port: '^80$',  protocol: 'http'  }];
-    if (protocol === 'https') return [{ enabled: true, file, host: regexHost, port: '^443$', protocol: 'https' }];
+    if (protocol === 'http')  return [{ enabled: true, host: regexHost, protocol: 'http',  file }];
+    if (protocol === 'https') return [{ enabled: true, host: regexHost, protocol: 'https', file }];
     return [
-      { enabled: true, file, host: regexHost, port: '^80$',  protocol: 'http'  },
-      { enabled: true, file, host: regexHost, port: '^443$', protocol: 'https' },
+      { enabled: true, host: regexHost, protocol: 'http',  file: '^/.*' },
+      { enabled: true, host: regexHost, protocol: 'https', file: '^/.*' },
     ];
   }
 
   function burpFilename(program) {
-    // combina company + name para especificidade máxima
-    // ex: "DDF Network" + "Pornbox" → "burp-scope-ddf-network-pornbox.json"
     const parts = [program.company, program.name]
       .map(s => (s || '').trim())
       .filter(Boolean);
 
-    // deduplica se company === name
     const unique = parts.filter((v, i, arr) => i === 0 || v.toLowerCase() !== arr[i - 1].toLowerCase());
 
     const slug = unique
@@ -954,7 +957,6 @@
       });
     }
 
-    // ── Download Burp scope ────────────────────────────────────────────────────
     function downloadBurp() {
       const text     = formatBurp(data, selectedSections);
       const filename = burpFilename(data.program);
